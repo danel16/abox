@@ -1,0 +1,118 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: gpt4o
+  namespace: kagent
+spec:
+  provider: OpenAI
+  model: gpt-4.1-mini
+  apiKeySecret: kagent-openai
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    baseUrl: "http://agentgateway-external.agentgateway-system/v1"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-demo-server
+  namespace: kagent
+data:
+  server.py: |
+    from fastmcp import FastMCP
+    from datetime import datetime, timezone
+
+    mcp = FastMCP("demo-tools")
+
+    @mcp.tool()
+    def get_current_time() -> str:
+        """Returns the current UTC time as an ISO-8601 string"""
+        return datetime.now(timezone.utc).isoformat()
+
+    @mcp.tool()
+    def add_numbers(a: int, b: int) -> int:
+        """Add two integers and return the result"""
+        return a + b
+
+    mcp.run(transport="sse", host="0.0.0.0", port=3000)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-demo-server
+  namespace: kagent
+  labels:
+    app: mcp-demo-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-demo-server
+  template:
+    metadata:
+      labels:
+        app: mcp-demo-server
+    spec:
+      containers:
+      - name: mcp-server
+        image: ghcr.io/astral-sh/uv:python3.12-alpine
+        command: ["uv", "run", "--with", "fastmcp", "/app/server.py"]
+        ports:
+        - containerPort: 3000
+          name: mcp-sse
+        readinessProbe:
+          tcpSocket:
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        volumeMounts:
+        - name: script
+          mountPath: /app
+      volumes:
+      - name: script
+        configMap:
+          name: mcp-demo-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-demo-server
+  namespace: kagent
+spec:
+  selector:
+    app: mcp-demo-server
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: mcp-sse
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: demo-tool-server
+  namespace: kagent
+spec:
+  description: "Demo MCP tool server exposing time and math tools"
+  protocol: SSE
+  url: "http://mcp-demo-server.kagent.svc.cluster.local:3000/sse"
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: demo-agent
+  namespace: kagent
+spec:
+  description: "Demo agent with time and math tools via MCP"
+  declarative:
+    systemMessage: |
+      You are a helpful assistant with access to time and math tools.
+      Use the available tools when they are relevant to the user's question.
+    modelConfig: gpt4o
+    tools:
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: demo-tool-server
+        toolNames:
+        - get_current_time
+        - add_numbers

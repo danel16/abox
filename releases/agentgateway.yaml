@@ -46,3 +46,40 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: openai
+  namespace: agentgateway-system
+spec:
+  ai:
+    groups:
+    - providers:
+      - name: openai
+        openai:
+          model: gpt-4.1-mini
+        policies:
+          auth:
+            secretRef:
+              name: agentgateway-openai
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai-proxy
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+  - name: agentgateway-external
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1
+    backendRefs:
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+      name: openai
+      namespace: agentgateway-system
