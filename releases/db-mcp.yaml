@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-mcp
+  namespace: kagent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: db-mcp
+rules:
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: db-mcp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: db-mcp
+subjects:
+- kind: ServiceAccount
+  name: db-mcp
+  namespace: kagent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-mcp
+  namespace: kagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-mcp
+  template:
+    metadata:
+      labels:
+        app: db-mcp
+    spec:
+      serviceAccountName: db-mcp
+      containers:
+      - name: db-mcp
+        image: ghcr.io/danel16/abox/db-mcp:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: MCP_TRANSPORT_MODE
+          value: "http"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "3000"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-mcp
+  namespace: kagent
+spec:
+  selector:
+    app: db-mcp
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: db-mcp
+  namespace: kagent
+spec:
+  description: "MCP server for discovering and querying PostgreSQL/MySQL databases in the cluster"
+  protocol: STREAMABLE_HTTP
+  url: "http://db-mcp.kagent.svc.cluster.local:3000/mcp"

@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-expert-agent
+  namespace: kagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-expert-agent
+  template:
+    metadata:
+      labels:
+        app: db-expert-agent
+    spec:
+      containers:
+      - name: db-expert-agent
+        image: ghcr.io/danel16/abox/db-expert-agent:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kagent-openai
+              key: OPENAI_API_KEY
+        - name: DB_MCP_URL
+          value: "http://db-mcp.kagent.svc.cluster.local:3000/mcp"
+        - name: ALLOW_ORIGINS
+          value: "*"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-expert-agent
+  namespace: kagent
+spec:
+  selector:
+    app: db-expert-agent
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: db-expert-agent
+  namespace: kagent
+spec:
+  description: "Database expert agent for querying and analyzing PostgreSQL/MySQL databases in the cluster"
+  declarative:
+    systemMessage: |
+      You are a database expert assistant with access to a Kubernetes cluster.
+      You help users query and analyze data stored in PostgreSQL and MySQL/MariaDB databases
+      running in the cluster.
+
+      ## Your workflow for answering data questions
+
+      1. **Discover databases** — call `kubernetes_discover_databases` first to see what is available.
+         You can filter by namespace or db type if the user hints at one.
+
+      2. **Understand the schema** — before writing a query, inspect the target database's schema:
+         - List all tables: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','pg_catalog','performance_schema','sys') ORDER BY table_name`
+         - Inspect columns of relevant tables: `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = '<table>' ORDER BY ordinal_position`
+
+      3. **Build the query** — write a precise, efficient SQL query that answers the user's question.
+         Use CTEs (WITH …) for readability when the logic is complex.
+
+      4. **Execute the query** — call `execute_db_query` with the correct `type`, `host`, `database`, and `query`.
+         Results are capped at 500 rows. Add LIMIT clauses to avoid unnecessary data transfer.
+
+      5. **Explain the results** — present the data clearly: summarize key findings, highlight anomalies,
+         suggest follow-up queries if relevant.
+
+      ## Rules
+      - Only SELECT, WITH (CTEs), and EXPLAIN queries are allowed — the server enforces this automatically.
+      - Always confirm the database type (`postgres` or `mysql`) before running a query.
+      - When the user's question is ambiguous (e.g. multiple matching databases), ask which one to target.
+      - Keep queries read-only and scoped — avoid `SELECT *` on large tables; add WHERE clauses or LIMITs.
+      - If a query fails, diagnose the error, adjust, and retry with a corrected query.
+    modelConfig: gpt4o
+    tools:
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: db-mcp
+        toolNames:
+        - kubernetes_discover_databases
+        - execute_db_query
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: db-expert-agent
+  namespace: kagent
+spec:
+  parentRefs:
+  - name: agentgateway-external
+    namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /db-agent
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: db-expert-agent
+      port: 8080

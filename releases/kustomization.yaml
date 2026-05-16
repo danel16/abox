@@ -5,3 +5,5 @@ resources:
   - agentgateway.yaml
   - kagent.yaml
   - ai-agent.yaml
+  - db-mcp.yaml
+  - db-expert-agent.yaml
