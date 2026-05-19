@@ -13,6 +13,13 @@ spec:
       env:
       - name: DB_MCP_URL
         value: "http://db-mcp.kagent.svc.cluster.local:3000/mcp"
+      - name: OPENAI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: kagent-openai
+            key: OPENAI_API_KEY
+      - name: OPENAI_BASE_URL
+        value: "http://agentgateway-external.agentgateway-system/v1"
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
