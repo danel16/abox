@@ -1,0 +1,44 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: agentregistry-inventory
+  namespace: flux-system
+spec:
+  interval: 24h
+  url: https://github.com/den-vasyliev/agentregistry-inventory
+  ref:
+    branch: main
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: agentregistry-inventory
+  namespace: flux-system
+spec:
+  interval: 24h
+  chart:
+    spec:
+      chart: charts/agentregistry
+      sourceRef:
+        kind: GitRepository
+        name: agentregistry-inventory
+  targetNamespace: agentregistry
+  install:
+    createNamespace: true
+---
+apiVersion: agentregistry.dev/v1alpha1
+kind: DiscoveryConfig
+metadata:
+  name: abox
+  namespace: agentregistry
+spec:
+  environments:
+    - name: abox
+      cluster:
+        name: abox
+        useWorkloadIdentity: false
+      discoveryEnabled: true
+      namespaces:
+        - default
+        - kagent
+        - agentgateway-system
