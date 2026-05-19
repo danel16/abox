@@ -6,7 +6,9 @@ authors = [
     {name = "Your Name", email = "your@email.com"},
 ]
 dependencies = [
-    "google-adk[extensions]>=1.15.0,<2.0.0",
+    "google-adk[extensions]>=1.27.0,<2.0.0",
+    "a2a-sdk~=0.3.22",
+    "nest-asyncio>=1.6.0,<2.0.0",
     "opentelemetry-instrumentation-google-genai>=0.1.0,<1.0.0",
     "gcsfs>=2024.11.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
@@ -94,7 +96,7 @@ packages = ["app","frontend"]
 # These fields allow any generated project to work as a remote template
 name = "db-expert-agent"
 description = "Simple ReAct agent"
-base_template = "adk"
+base_template = "adk_a2a"
 agent_directory = "app"
 
 # Generation context

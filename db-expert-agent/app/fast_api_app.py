@@ -13,14 +13,20 @@
 # limitations under the License.
 
 import os
-
 import logging as stdlib_logging
 
 import google.auth
 import google.auth.exceptions
-from fastapi import FastAPI
-from google.adk.cli.fast_api import get_fast_api_app
+from a2a.server.apps import A2AFastAPIApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
+from google.adk.artifacts import GcsArtifactService, InMemoryArtifactService
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 
+from app.agent import app as adk_app
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
 
@@ -34,29 +40,55 @@ try:
     _gcp_logger = _logging_client.logger(__name__)
 except (google.auth.exceptions.DefaultCredentialsError, Exception):
     stdlib_logging.warning("GCP credentials not available — Cloud Logging disabled")
-allow_origins = (
-    os.getenv("ALLOW_ORIGINS", "").split(",") if os.getenv("ALLOW_ORIGINS") else None
-)
 
-# Artifact bucket for ADK (created by Terraform, passed via env var)
 logs_bucket_name = os.environ.get("LOGS_BUCKET_NAME")
-
-AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# In-memory session configuration - no persistent storage
-session_service_uri = None
-
-artifact_service_uri = f"gs://{logs_bucket_name}" if logs_bucket_name else None
-
-app: FastAPI = get_fast_api_app(
-    agents_dir=AGENT_DIR,
-    web=True,
-    artifact_service_uri=artifact_service_uri,
-    allow_origins=allow_origins,
-    session_service_uri=session_service_uri,
-    otel_to_cloud=_gcp_logger is not None,
+artifact_service = (
+    GcsArtifactService(bucket_name=logs_bucket_name)
+    if logs_bucket_name
+    else InMemoryArtifactService()
 )
-app.title = "db-expert-agent"
-app.description = "API for interacting with the Agent db-expert-agent"
+
+runner = Runner(
+    app=adk_app,
+    artifact_service=artifact_service,
+    session_service=InMemorySessionService(),
+)
+
+request_handler = DefaultRequestHandler(
+    agent_executor=A2aAgentExecutor(runner=runner),
+    task_store=InMemoryTaskStore(),
+)
+
+agent_card = AgentCard(
+    name=adk_app.root_agent.name,
+    description=adk_app.root_agent.description or "Database expert agent for Kubernetes clusters",
+    url=os.getenv("APP_URL", "http://0.0.0.0:8000"),
+    version=os.getenv("AGENT_VERSION", "0.1.0"),
+    capabilities=AgentCapabilities(streaming=True),
+    default_input_modes=["text/plain"],
+    default_output_modes=["text/plain"],
+    skills=[
+        AgentSkill(
+            id="query_databases",
+            name="Query Databases",
+            description="Discover and query PostgreSQL and MySQL/MariaDB databases running in a Kubernetes cluster.",
+            tags=["database", "sql", "kubernetes"],
+            examples=[
+                "What databases are available?",
+                "Show me all tables in the orders database.",
+                "How many users signed up last week?",
+            ],
+        )
+    ],
+)
+
+app = A2AFastAPIApplication(
+    agent_card=agent_card,
+    http_handler=request_handler,
+).build(
+    title="db-expert-agent",
+    description="API for interacting with the Agent db-expert-agent",
+)
 
 
 @app.post("/feedback")
@@ -76,7 +108,6 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     return {"status": "success"}
 
 
-# Main execution
 if __name__ == "__main__":
     import uvicorn
 
