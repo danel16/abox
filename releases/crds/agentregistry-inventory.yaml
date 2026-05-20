@@ -30,20 +30,3 @@ spec:
   targetNamespace: agentregistry
   install:
     createNamespace: true
----
-apiVersion: agentregistry.dev/v1alpha1
-kind: DiscoveryConfig
-metadata:
-  name: abox
-  namespace: agentregistry
-spec:
-  environments:
-    - name: abox
-      cluster:
-        name: abox
-        useWorkloadIdentity: false
-      discoveryEnabled: true
-      namespaces:
-        - default
-        - kagent
-        - agentgateway-system

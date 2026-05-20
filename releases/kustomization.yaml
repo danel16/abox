@@ -7,6 +7,6 @@ resources:
   - ai-agent.yaml
   - db-mcp.yaml
   - db-expert-agent.yaml
-  - agentregistry-inventory.yaml
+  - agentregistry-discoveryconfig.yaml
   - mcpg.yaml
   - qdrant.yaml
