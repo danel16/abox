@@ -59,7 +59,7 @@ spec:
         - name: PORT
           value: "3000"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://phoenix.phoenix.svc.cluster.local:6006"
+          value: "http://phoenix-svc.phoenix.svc.cluster.local:4317"
         livenessProbe:
           httpGet:
             path: /health
