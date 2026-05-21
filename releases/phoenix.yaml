@@ -28,3 +28,6 @@ spec:
     namespace: flux-system
   install:
     createNamespace: true
+  values:
+    auth:
+      enableAuth: false

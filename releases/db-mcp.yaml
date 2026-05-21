@@ -60,6 +60,8 @@ spec:
           value: "3000"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://phoenix-svc.phoenix.svc.cluster.local:4317"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "grpc"
         livenessProbe:
           httpGet:
             path: /health
