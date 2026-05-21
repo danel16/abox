@@ -19,6 +19,8 @@ import os
 def setup_telemetry() -> str | None:
     """Configure OpenTelemetry and GenAI telemetry with GCS upload."""
 
+    _setup_phoenix_tracing()
+
     bucket = os.environ.get("LOGS_BUCKET_NAME")
     capture_content = os.environ.get(
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false"
@@ -49,3 +51,25 @@ def setup_telemetry() -> str | None:
         )
 
     return bucket
+
+
+def _setup_phoenix_tracing() -> None:
+    endpoint = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT") or os.environ.get(
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+    )
+    if not endpoint:
+        logging.info(
+            "Phoenix tracing disabled (set PHOENIX_COLLECTOR_ENDPOINT to enable)"
+        )
+        return
+    try:
+        from phoenix.otel import register
+
+        register(auto_instrument=True)
+        logging.info("Phoenix tracing enabled, sending traces to %s", endpoint)
+    except ImportError:
+        logging.warning(
+            "arize-phoenix-otel not installed; Phoenix tracing unavailable"
+        )
+    except Exception as exc:
+        logging.warning("Failed to initialize Phoenix tracing: %s", exc)

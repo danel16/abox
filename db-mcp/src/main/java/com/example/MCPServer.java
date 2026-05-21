@@ -12,6 +12,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
@@ -332,9 +340,42 @@ public class MCPServer {
                             case "tools/list":
                                 response.set("result", handleToolsList());
                                 break;
-                            case "tools/call":
-                                response.set("result", handleToolsCall(params));
+                            case "tools/call": {
+                                // Extract W3C trace context injected by openinference-instrumentation-mcp
+                                JsonNode meta = params.path("_meta");
+                                Map<String, String> carrier = new HashMap<>();
+                                if (meta.isObject()) {
+                                    if (meta.has("traceparent")) carrier.put("traceparent", meta.get("traceparent").asText());
+                                    if (meta.has("tracestate")) carrier.put("tracestate", meta.get("tracestate").asText());
+                                }
+                                TextMapPropagator propagator = GlobalOpenTelemetry.getPropagators().getTextMapPropagator();
+                                io.opentelemetry.context.Context parentCtx = propagator.extract(
+                                    io.opentelemetry.context.Context.current(), carrier,
+                                    new TextMapGetter<Map<String, String>>() {
+                                        @Override public Iterable<String> keys(Map<String, String> c) { return c.keySet(); }
+                                        @Override public String get(Map<String, String> c, String key) { return c.get(key); }
+                                    });
+                                String toolName = params.path("name").asText();
+                                Tracer tracer = GlobalOpenTelemetry.getTracer("db-mcp");
+                                Span span = tracer.spanBuilder("mcp/tools/call")
+                                    .setParent(parentCtx)
+                                    .setAttribute("mcp.tool.name", toolName)
+                                    .startSpan();
+                                try (Scope scope = span.makeCurrent()) {
+                                    ObjectNode toolResult = handleToolsCall(params);
+                                    if (toolResult.path("isError").asBoolean(false)) {
+                                        span.setStatus(StatusCode.ERROR, "tool execution failed");
+                                    }
+                                    response.set("result", toolResult);
+                                } catch (Exception e) {
+                                    span.recordException(e);
+                                    span.setStatus(StatusCode.ERROR, e.getMessage());
+                                    throw e;
+                                } finally {
+                                    span.end();
+                                }
                                 break;
+                            }
                             case "ping":
                                 response.set("result", objectMapper.createObjectNode());
                                 break;

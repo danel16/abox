@@ -10,3 +10,4 @@ resources:
   - agentregistry-discoveryconfig.yaml
   - mcpg.yaml
   - qdrant.yaml
+  - phoenix.yaml

@@ -92,6 +92,12 @@
             <version>8.3.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+            <version>1.40.0</version>
+        </dependency>
+
         <!-- HTTP Server (Jetty) for HTTP transport mode -->
         <dependency>
             <groupId>org.eclipse.jetty</groupId>

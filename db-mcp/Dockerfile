@@ -36,6 +36,10 @@ WORKDIR /app
 # Copy the built jar from builder stage
 COPY --from=builder /app/target/db-mcp-0.1.0.jar app.jar
 
+ARG OTEL_AGENT_VERSION=2.5.0
+RUN curl -L -o /app/opentelemetry-javaagent.jar \
+    "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar"
+
 # Change ownership to app user
 RUN chown -R appuser:appuser /app
 
@@ -48,6 +52,8 @@ EXPOSE 3000
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
+
+ENV JAVA_TOOL_OPTIONS="-javaagent:/app/opentelemetry-javaagent.jar"
 
 # Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
