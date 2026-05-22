@@ -40,8 +40,8 @@ def _get_openai() -> OpenAI:
     global _openai_client
     if _openai_client is None:
         _openai_client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL") or None,
+            api_key=os.environ.get("EMBEDDING_API_KEY"),
+            base_url=os.environ.get("EMBEDDING_BASE_URL") or None,
         )
     return _openai_client
 
