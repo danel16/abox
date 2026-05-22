@@ -23,6 +23,8 @@ from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams, StreamableHTTPConnectionParams
 from mcp import StdioServerParameters
 
+from app.rag_tools import ingest_document, search_knowledge_base
+
 DB_MCP_DIR = str(pathlib.Path(__file__).parent.parent.parent / "db-mcp")
 DB_MCP_URL = os.environ.get("DB_MCP_URL")
 
@@ -47,6 +49,17 @@ running in the cluster.
 
 5. **Explain the results** — present the data clearly: summarize key findings, highlight anomalies, \
    suggest follow-up queries if relevant.
+
+## Knowledge Base (RAG)
+You have access to a vector knowledge base backed by Qdrant. Use it to enrich your answers \
+with stored context such as schema documentation, runbooks, or notes saved by users.
+
+- **Before answering complex questions**, call `search_knowledge_base` to retrieve relevant context. \
+  Pass a concise, keyword-rich query that captures what you're looking for.
+- **When a user asks you to remember or store something**, call `ingest_document` with the text \
+  and a descriptive `source` label (e.g. `"schema-notes"`, `"runbook-payments-db"`).
+- Results include a relevance score (0–1). Prefer chunks with score > 0.7; treat lower scores as weak hints.
+- If no relevant results are found, proceed without the knowledge base context.
 
 ## Rules
 - Only SELECT, WITH (CTEs), and EXPLAIN queries are allowed — the server enforces this automatically.
@@ -80,7 +93,9 @@ root_agent = Agent(
     model=LiteLlm(model="openai/gpt-4.1-mini"),
     instruction=INSTRUCTION,
     tools=[
-        McpToolset(connection_params=_mcp_connection())
+        McpToolset(connection_params=_mcp_connection()),
+        search_knowledge_base,
+        ingest_document,
     ],
 )
 
