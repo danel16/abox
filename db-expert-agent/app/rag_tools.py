@@ -39,9 +39,10 @@ def _get_qdrant() -> QdrantClient:
 def _get_openai() -> OpenAI:
     global _openai_client
     if _openai_client is None:
+        base_url = os.environ.get("EMBEDDING_BASE_URL", "https://api.openai.com/v1")
         _openai_client = OpenAI(
             api_key=os.environ.get("EMBEDDING_API_KEY"),
-            base_url=os.environ.get("EMBEDDING_BASE_URL") or None,
+            base_url=base_url,
         )
     return _openai_client
 
