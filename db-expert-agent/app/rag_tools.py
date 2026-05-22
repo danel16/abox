@@ -79,11 +79,11 @@ def search_knowledge_base(query: str, collection: str = "knowledge", limit: int 
     try:
         _ensure_collection(collection)
         vector = _embed(query)
-        results = _get_qdrant().search(
+        results = _get_qdrant().query_points(
             collection_name=collection,
-            query_vector=vector,
+            query=vector,
             limit=min(max(limit, 1), 20),
-        )
+        ).points
         if not results:
             return "No relevant documents found in the knowledge base."
         chunks = []
